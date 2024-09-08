@@ -126,7 +126,7 @@ def getTemp():
         _formatTemperature = '{0:0.1f}*C'.format(temperature)
         _formatHumidity = '{0:0.1f}%'.format(humidity)
         logger.info(f'IP:{ip} /temperature success. request:{request}')
-        return jsonify({'temperature': _formatTemperature, 'humidity': _formatHumidity, '_datetime': datetime.now(), "ip": ip}), 200
+        return jsonify({'temperature': temperature, 'humidity': humidity, 'format_temperature': _formatTemperature, 'format_humidity': _formatHumidity, '_datetime': datetime.now(), "ip": ip}), 200
     except:
         logger.error(f'IP:{ip} /temperature failed. request:{request}')
         return jsonify({'error': 'get temperature failed.', 'ip': ip}), 400
