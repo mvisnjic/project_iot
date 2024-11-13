@@ -1,6 +1,6 @@
 # project-iot - simple flask api
 
-Minimal flask API for checking a temperature, toggle lights and getting a logs from it.
+Minimal flask API for checking a temperature, toggle relays and getting a logs from it.
 
 ## requirements
 - Rpi model 4B
