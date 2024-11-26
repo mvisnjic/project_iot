@@ -26,16 +26,25 @@ if not os.path.exists(LOG_DIR):
 log_file = os.path.join(LOG_DIR, 'project-iot.log')
 logging.basicConfig(filename=log_file, level=logging.INFO)
 
+def prepare_relay_and_get_input(relay_pin):
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setup(relay_pin, GPIO.OUT)
+    return GPIO.input(relay_pin)
+
+def logging_relay(ip, relay_number, relay_pin, choice, before_input_val):
+    logger.info(f'IP:{ip} toggling relay_{relay_number}_pin_{relay_pin} {choice}.')
+    new_input_val = GPIO.input(relay_pin)
+    logger.info(f'Relay current state:{new_input_val}, before state:{before_input_val}')
+    
 def toggleRelay(ip=-1, relay_number=-1, choice='off'):
     pin_var_name = f"RELAY_PIN_{relay_number}"
     RELAY_PIN = int(os.getenv(pin_var_name))
-    
     if choice.upper() == 'ON':
         try:
-            GPIO.setmode(GPIO.BOARD)
-            GPIO.setup(RELAY_PIN, GPIO.OUT)
+            before_input_value = prepare_relay_and_get_input(RELAY_PIN)
             GPIO.output(RELAY_PIN, GPIO.HIGH)
-            logger.info(f'IP:{ip} toggled relay_{relay_number} {choice}.')
+            logging_relay(ip, relay_number, RELAY_PIN, choice, before_input_value)
+            
             return True
         except:
             logger.error(f'IP:{ip} failed to toggle relay {choice}!')
@@ -43,10 +52,9 @@ def toggleRelay(ip=-1, relay_number=-1, choice='off'):
             return False
     elif choice.upper() == 'OFF':
         try:
-            GPIO.setmode(GPIO.BOARD)
-            GPIO.setup(RELAY_PIN, GPIO.OUT)
+            before_input_value = prepare_relay_and_get_input(RELAY_PIN)
             GPIO.output(RELAY_PIN, GPIO.LOW)
-            logger.info(f'IP:{ip} toggled relay {choice}.')
+            logging_relay(ip, relay_number, RELAY_PIN, choice, before_input_value)
             return True
         except:
             logger.error(f'IP:{ip} failed to toggle relay {choice}!')
@@ -108,22 +116,31 @@ def clean_logs(directory, from_date, to_date, from_hour, to_hour):
     return False;
 
 def setLCDMessage(temperature,humidity):
-    lcd = CharLCD(
-    pin_rs=15,
-    pin_rw=12,
-    pin_e=16,
-    pins_data=[31, 33, 35, 37],
-    cols=16, rows=4,
-    numbering_mode=GPIO.BOARD
-    )
+    PIN_RS = os.getenv('PIN_RS')
+    PIN_RW = os.getenv('PIN_RW')
+    PIN_E = os.getenv('PIN_E')
+    PINS = os.getenv('PINS_DATA')
+    
+    pins = list(map(int, PINS.split(',')))
     
     try:
+        lcd = CharLCD(
+        pin_rs=int(PIN_RS),
+        pin_rw=int(PIN_RW),
+        pin_e=int(PIN_E),
+        pins_data=pinse,
+        cols=16, rows=4,
+        numbering_mode=GPIO.BOARD
+        )
+    
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
         lcd.clear()
         lcd.write_string(f"{temperature} {humidity}\r\n{current_time}")
-
+    except:
+        logger.error(f'Setting LCD message error.')
     finally:
         lcd.close(clear=False)
+        
     
 # ROUTES
 @app.route('/togglerelay', methods=['POST'])
@@ -135,10 +152,41 @@ def toggleRoute():
         res = toggleRelay(ip, relay_number, choice)
         if(res):
             logger.info(f'IP:{ip} /togglerelay success. request:{request}')
-            return jsonify({"response": f"Turned {choice} light",'ip': ip}), 200
+            return jsonify({"status": f"Turned {choice} relay-{relay_number}",'ip': ip}), 200
 
         logger.error(f'IP:{ip} /togglerelay failed. request:{request}')
-        return jsonify({"error": f"Toggling lights failed.", 'ip': ip}), 400
+        return jsonify({"error": f"Toggling relay failed.", 'ip': ip}), 400
+
+@app.route('/statusrelay', methods=['GET'])
+def statusRelay():
+    try:
+        ip = request.access_route[-1]
+        relay_number = request.args.get('number', None)
+        
+        relay_dict = {}
+        
+        GPIO.setmode(GPIO.BOARD)
+        relay_number = int(relay_number)
+        if(relay_number > 0 and relay_number < 9):
+            for i in range(1,relay_number + 1):
+                try:
+                    pin_var_name = f"RELAY_PIN_{i}"
+                    RELAY_PIN = int(os.getenv(pin_var_name))
+                    GPIO.setup(RELAY_PIN, GPIO.OUT)
+                    input_value = GPIO.input(int(RELAY_PIN))
+                    relay_dict[f'relay_{i}_pin_{RELAY_PIN}'] = input_value
+                except:
+                    logger.error('Wrong number of relays provided.')
+                    break
+        
+            logger.info(f'IP:{ip} /statusrelay success. relay_dict: {relay_dict} request:{request}')
+            return jsonify({"status": relay_dict ,'ip': ip}), 200
+        
+        logger.error(f'IP:{ip} /statusrelay failed. request:{request}')
+        return jsonify({'error': 'Something went wrong!', 'ip': ip}), 400
+    except:
+        logger.error(f'IP:{ip} Get relay status failed. request:{request}')
+        return jsonify({'error': f'Status relay failed.', 'ip': ip}), 400
 
 @app.route('/temperature', methods=['GET'])
 def getTemp():
@@ -147,8 +195,8 @@ def getTemp():
         humidity, temperature = Adafruit_DHT.read_retry(SENSOR, DHT_PIN)
         _formatTemperature = '{0:0.1f}*C'.format(temperature)
         _formatHumidity = '{0:0.1f}%'.format(humidity)
-        logger.info(f'IP:{ip} /temperature success. request:{request}')
         setLCDMessage(_formatTemperature, _formatHumidity)
+        logger.info(f'IP:{ip} /temperature success. request:{request}')
         return jsonify({'temperature': temperature, 'humidity': humidity, 'format_temperature': _formatTemperature, 'format_humidity': _formatHumidity, '_datetime': datetime.now(), "ip": ip}), 200
     except:
         logger.error(f'IP:{ip} /temperature failed. request:{request}')
