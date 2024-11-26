@@ -23,11 +23,18 @@ DHT_PIN = int(os.getenv('DHT_GPIO_PIN'))
 number_of_measurements = 5
 
 def setLCDMessage(data):
+    PIN_RS = os.getenv('PIN_RS')
+    PIN_RW = os.getenv('PIN_RW')
+    PIN_E = os.getenv('PIN_E')
+    PINS = os.getenv('PINS_DATA')
+    
+    pins = list(map(int, PINS.split(',')))
+    
     lcd = CharLCD(
-    pin_rs=15,
-    pin_rw=12,
-    pin_e=16,
-    pins_data=[31, 33, 35, 37],
+    pin_rs=int(PIN_RS),
+    pin_rw=int(PIN_RW),
+    pin_e=int(PIN_E),
+    pins_data=pins,
     cols=16, rows=4,
     numbering_mode=GPIO.BOARD
     )
@@ -39,6 +46,14 @@ def setLCDMessage(data):
     except Exception as e:
         logger.error(f"Set LCD message failed, error:{e}")
 
+def read_sensor():
+    humidity, temperature = Adafruit_DHT.read_retry(sensor, DHT_PIN)
+    if(int(humidity) > 100):
+        read_sensor()
+        return {'temperature': 0, 'humidity': 0}
+    print('Temp={0:0.1f}*C  Humidity={1:0.1f}%'.format(temperature, humidity), "Datetime -", datetime.now())
+    return {'temperature': temperature, 'humidity': humidity}
+
 final_temperature = 0
 
 print("Starting - Datetime:", datetime.now(), "\n")
@@ -46,11 +61,10 @@ print("Starting - Datetime:", datetime.now(), "\n")
 for i in range(number_of_measurements):
     try:
         print("Očitanje", i+1)
-        humidity, temperature = Adafruit_DHT.read_retry(sensor, DHT_PIN)
-        format_LCD = '{0:0.1f}*C {1:0.1f}%'.format(temperature,humidity)
-        print('Temp={0:0.1f}*C  Humidity={1:0.1f}%'.format(temperature, humidity), "Datetime -", datetime.now())
-        final_temperature = temperature
-        final_humidity = humidity
+        measurement = read_sensor()
+        final_temperature = measurement['temperature']
+        final_humidity = measurement['humidity']
+        format_LCD = '{0:0.1f}*C {1:0.1f}%'.format(measurement['temperature'],measurement['humidity'])
         if(i+1 < number_of_measurements):
             time.sleep(1)
     except RuntimeError as error:
@@ -69,11 +83,12 @@ GPIO.setwarnings(False)
 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 logger.info(f'Final temperature,humidity:{format_LCD} Datetime: {current_time}')
 
-if(int(final_temperature) <= 16):
+if(int(final_temperature) <= 15):
     try:
         GPIO.setup(RELAY_PIN, GPIO.OUT)
+        before_input_value = GPIO.input(RELAY_PIN)
         GPIO.output(RELAY_PIN, GPIO.HIGH)
-        logger.info(f'Toggled heater(relay_pin {RELAY_PIN}) ON.')
+        logger.info(f'Toggled heater(relay_1-pin_{RELAY_PIN}) ON.')
         setLCDMessage(format_LCD)
     except:
         logger.error(f'Failed to toggle relay ON!')
@@ -86,4 +101,6 @@ else:
     except:
         logger.error(f'Failed to toggle relay OFF!')
 
+input_value = GPIO.input(RELAY_PIN)
+logger.info(f'Relay current state: {input_value}, before state: {before_input_value}')
 print("\nFinished - datetime:", datetime.now(), "\n")
