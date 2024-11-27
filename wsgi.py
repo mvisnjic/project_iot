@@ -1,3 +1,6 @@
-from app import app
+from thingnet import create_app
 
-application = app
+app = create_app()
+
+if __name__ == "__main__":
+    app.run()
