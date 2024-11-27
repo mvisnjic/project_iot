@@ -6,10 +6,11 @@ from RPLCD.gpio import CharLCD
 import logging
 import os
 from dotenv import load_dotenv
+import rpi_controller as rpi_controller
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('dht11-script')
 LOG_DIR = os.getenv('LOG_DIR')
 
 if LOG_DIR is None:
@@ -17,39 +18,16 @@ if LOG_DIR is None:
 
 log_file = os.path.join(LOG_DIR, 'dht11-script.log')
 logging.basicConfig(filename=log_file, level=logging.INFO)
+
 sensor = Adafruit_DHT.DHT11
 
 DHT_PIN = int(os.getenv('DHT_GPIO_PIN'))
-number_of_measurements = 5
+NUMBER_OF_MEASUREMENTS = int(os.getenv('NUMBER_OF_MEASUREMENTS'))
 
-def setLCDMessage(data):
-    PIN_RS = os.getenv('PIN_RS')
-    PIN_RW = os.getenv('PIN_RW')
-    PIN_E = os.getenv('PIN_E')
-    PINS = os.getenv('PINS_DATA')
-    
-    pins = list(map(int, PINS.split(',')))
-    
-    lcd = CharLCD(
-    pin_rs=int(PIN_RS),
-    pin_rw=int(PIN_RW),
-    pin_e=int(PIN_E),
-    pins_data=pins,
-    cols=16, rows=4,
-    numbering_mode=GPIO.BOARD
-    )
-    
-    try:
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
-        lcd.clear()
-        lcd.write_string(f"{data}\r\n{current_time}")
-    except Exception as e:
-        logger.error(f"Set LCD message failed, error:{e}")
-
-def read_sensor():
-    humidity, temperature = Adafruit_DHT.read_retry(sensor, DHT_PIN)
+def read_sensor(sensor, dht_pin):
+    humidity, temperature = Adafruit_DHT.read_retry(sensor, dht_pin)
     if(int(humidity) > 100):
-        read_sensor()
+        read_sensor(sensor, dht_pin)
         return {'temperature': 0, 'humidity': 0}
     print('Temp={0:0.1f}*C  Humidity={1:0.1f}%'.format(temperature, humidity), "Datetime -", datetime.now())
     return {'temperature': temperature, 'humidity': humidity}
@@ -58,14 +36,14 @@ final_temperature = 0
 
 print("Starting - Datetime:", datetime.now(), "\n")
 
-for i in range(number_of_measurements):
+for i in range(NUMBER_OF_MEASUREMENTS):
     try:
         print("Očitanje", i+1)
-        measurement = read_sensor()
+        measurement = read_sensor(sensor, DHT_PIN)
         final_temperature = measurement['temperature']
         final_humidity = measurement['humidity']
         format_LCD = '{0:0.1f}*C {1:0.1f}%'.format(measurement['temperature'],measurement['humidity'])
-        if(i+1 < number_of_measurements):
+        if(i+1 < NUMBER_OF_MEASUREMENTS):
             time.sleep(1)
     except RuntimeError as error:
         logger.error(error)
@@ -83,21 +61,20 @@ GPIO.setwarnings(False)
 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 logger.info(f'Final temperature,humidity:{format_LCD} Datetime: {current_time}')
 
-if(int(final_temperature) <= 15):
+if(int(final_temperature) <= 15 and int(final_temperature) > 0):
     try:
-        GPIO.setup(RELAY_PIN, GPIO.OUT)
-        before_input_value = GPIO.input(RELAY_PIN)
+        before_input_value = rpi_controller.prepare_relay_and_get_input(RELAY_PIN)
         GPIO.output(RELAY_PIN, GPIO.HIGH)
         logger.info(f'Toggled heater(relay_1-pin_{RELAY_PIN}) ON.')
-        setLCDMessage(format_LCD)
+        rpi_controller.setLCDMessage(final_temperature, final_humidity)
     except:
         logger.error(f'Failed to toggle relay ON!')
 else:
     try:
-        GPIO.setup(RELAY_PIN, GPIO.OUT)
+        before_input_value = rpi_controller.prepare_relay_and_get_input(RELAY_PIN)
         GPIO.output(RELAY_PIN, GPIO.LOW)
         logger.info(f'Toggled heater(relay_pin {RELAY_PIN}) OFF.')
-        setLCDMessage(format_LCD)
+        rpi_controller.setLCDMessage(final_temperature, final_humidity)
     except:
         logger.error(f'Failed to toggle relay OFF!')
 
