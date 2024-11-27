@@ -128,7 +128,7 @@ def setLCDMessage(temperature,humidity):
         pin_rs=int(PIN_RS),
         pin_rw=int(PIN_RW),
         pin_e=int(PIN_E),
-        pins_data=pinse,
+        pins_data=pins,
         cols=16, rows=4,
         numbering_mode=GPIO.BOARD
         )
