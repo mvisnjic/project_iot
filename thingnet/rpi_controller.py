@@ -1,5 +1,6 @@
 import RPi.GPIO as GPIO
 from datetime import datetime, timedelta
+import time
 import Adafruit_DHT
 from RPLCD.gpio import CharLCD
 import re
@@ -19,19 +20,19 @@ def prepare_relay_and_get_input(relay_pin):
     GPIO.setup(relay_pin, GPIO.OUT)
     return GPIO.input(relay_pin)
 
-def logging_relay(ip, relay_number, relay_pin, choice, before_input_val):
-    logger.info(f'IP:{ip} toggling relay_{relay_number}_pin_{relay_pin} {choice}.')
+def logging_relay(ip, relay_number, relay_pin, choice, past_input_val):
+    logger.info(f'IP:{ip} toggling relay_{relay_number}_pin_{relay_pin} {choice}. Datetime: {datetime.now()}')
     new_input_val = GPIO.input(relay_pin)
-    logger.info(f'Relay current state:{new_input_val}, before state:{before_input_val}')
+    logger.info(f'Relay current state:{new_input_val}, past state:{past_input_val}')
     
 def toggleRelay(ip=-1, relay_number=-1, choice='off'):
     pin_var_name = f"RELAY_PIN_{relay_number}"
     RELAY_PIN = int(os.getenv(pin_var_name))
     if choice.upper() == 'ON':
         try:
-            before_input_value = prepare_relay_and_get_input(RELAY_PIN)
+            past_input_value = prepare_relay_and_get_input(RELAY_PIN)
             GPIO.output(RELAY_PIN, GPIO.HIGH)
-            logging_relay(ip, relay_number, RELAY_PIN, choice, before_input_value)
+            logging_relay(ip, relay_number, RELAY_PIN, choice, past_input_value)
             
             return True
         except:
@@ -40,9 +41,9 @@ def toggleRelay(ip=-1, relay_number=-1, choice='off'):
             return False
     elif choice.upper() == 'OFF':
         try:
-            before_input_value = prepare_relay_and_get_input(RELAY_PIN)
+            past_input_value = prepare_relay_and_get_input(RELAY_PIN)
             GPIO.output(RELAY_PIN, GPIO.LOW)
-            logging_relay(ip, relay_number, RELAY_PIN, choice, before_input_value)
+            logging_relay(ip, relay_number, RELAY_PIN, choice, past_input_value)
             return True
         except:
             logger.error(f'IP:{ip} failed to toggle relay {choice}!')
@@ -129,3 +130,34 @@ def setLCDMessage(temperature,humidity):
         logger.error(f'Setting LCD message error.')
     finally:
         lcd.close(clear=False)
+
+def run_water_pump(ip, number_of_relay, run_time, number_of_retries):
+    try:
+        number_of_relay = int(number_of_relay)
+        run_time = int(run_time)
+        number_of_retries = int(number_of_retries)
+        
+        turn_on = toggleRelay(ip, number_of_relay, 'on')
+        if(turn_on):
+            time.sleep(int(run_time))
+            turn_off = toggleRelay(ip, number_of_relay, 'off')
+            if(turn_off):
+                return True
+            for i in range(number_of_retries):
+                logger.info(f'Failed to turn off water pump. Trying again... attempt {i+1}/{number_of_retries}. Datetime: {datetime.now()}')
+                turn_off = toggleRelay('script', number_of_relay, 'off')
+        logger.error(f"Failed to turn on water_pump. Datetime: {datetime.now()}")
+    except Exception as error:
+        logger.error(f"Water pump exception! Something went wrong! Error: {error}. Datetime: {datetime.now()}")
+    
+def read_dht_sensor(sensor, dht_pin):
+    try:
+        humidity, temperature = Adafruit_DHT.read_retry(sensor, dht_pin)
+    except:
+        logger.error("Read sensor failed! Calling function again...")
+        return read_dht_sensor(sensor,dht_pin)
+
+    if(humidity is None or temperature is None or int(humidity) > 100):
+        return read_dht_sensor(sensor, dht_pin)
+    print('Temp={0:0.1f}*C  Humidity={1:0.1f}%'.format(temperature, humidity), "Datetime -", datetime.now())
+    return {'temperature': temperature, 'humidity': humidity}

@@ -24,18 +24,6 @@ sensor = Adafruit_DHT.DHT11
 DHT_PIN = int(os.getenv('DHT_GPIO_PIN'))
 NUMBER_OF_MEASUREMENTS = int(os.getenv('NUMBER_OF_MEASUREMENTS'))
 
-def read_sensor(sensor, dht_pin):
-    try:
-        humidity, temperature = Adafruit_DHT.read_retry(sensor, dht_pin)
-    except:
-        logger.error("Read sensor failed! Calling function again...")
-        return read_sensor(sensor,dht_pin)
-
-    if(humidity is None or temperature is None or int(humidity) > 100):
-        return read_sensor(sensor, dht_pin)
-    print('Temp={0:0.1f}*C  Humidity={1:0.1f}%'.format(temperature, humidity), "Datetime -", datetime.now())
-    return {'temperature': temperature, 'humidity': humidity}
-
 final_temperature = 0
 
 print("Starting - Datetime:", datetime.now(), "\n")
@@ -43,7 +31,7 @@ print("Starting - Datetime:", datetime.now(), "\n")
 for i in range(NUMBER_OF_MEASUREMENTS):
     try:
         print("Očitanje", i+1)
-        measurement = read_sensor(sensor, DHT_PIN)
+        measurement = rpi_controller.read_dht_sensor(sensor, DHT_PIN)
         final_temperature = measurement['temperature']
         final_humidity = measurement['humidity']
         format_LCD = '{0:0.1f}*C {1:0.1f}%'.format(measurement['temperature'],measurement['humidity'])
@@ -65,7 +53,7 @@ logger.info(f'Final temperature,humidity:{format_LCD} Datetime: {current_time}')
 
 if(int(final_temperature) <= 15 and int(final_temperature) > 0):
     try:
-        before_input_value = rpi_controller.prepare_relay_and_get_input(RELAY_PIN)
+        past_input_value = rpi_controller.prepare_relay_and_get_input(RELAY_PIN)
         GPIO.output(RELAY_PIN, GPIO.HIGH)
         logger.info(f'Toggled heater(relay_1-pin_{RELAY_PIN}) ON.')
         rpi_controller.setLCDMessage(final_temperature, final_humidity)
@@ -73,7 +61,7 @@ if(int(final_temperature) <= 15 and int(final_temperature) > 0):
         logger.error(f'Failed to toggle relay ON!')
 else:
     try:
-        before_input_value = rpi_controller.prepare_relay_and_get_input(RELAY_PIN)
+        past_input_value = rpi_controller.prepare_relay_and_get_input(RELAY_PIN)
         GPIO.output(RELAY_PIN, GPIO.LOW)
         logger.info(f'Toggled heater(relay_pin {RELAY_PIN}) OFF.')
         rpi_controller.setLCDMessage(final_temperature, final_humidity)
@@ -81,5 +69,5 @@ else:
         logger.error(f'Failed to toggle relay OFF!')
 
 input_value = GPIO.input(RELAY_PIN)
-logger.info(f'Relay current state: {input_value}, before state: {before_input_value}')
+logger.info(f'Relay current state: {input_value}, past state: {past_input_value}')
 print("\nFinished - datetime:", datetime.now(), "\n")

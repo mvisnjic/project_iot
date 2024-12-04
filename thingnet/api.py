@@ -8,8 +8,6 @@ import os
 from dotenv import load_dotenv
 import logging
 from thingnet import rpi_controller as rpi_controller
-from thingnet import water_pump as water_pump
-from thingnet import dht11 as dht11
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ DHT_PIN = int(os.getenv('DHT_GPIO_PIN'))
 bp = Blueprint('api', __name__, url_prefix='/api')
 
 @bp.route('/togglerelay', methods=['POST'])
-def toggleRoute():
+def toggleRelay():
     if request.method == 'POST':
         ip = request.access_route[-1]
         choice = request.args.get('choice', None)
@@ -49,8 +47,7 @@ def statusRelay():
                 try:
                     pin_var_name = f"RELAY_PIN_{i}"
                     RELAY_PIN = int(os.getenv(pin_var_name))
-                    GPIO.setup(RELAY_PIN, GPIO.OUT)
-                    input_value = GPIO.input(int(RELAY_PIN))
+                    input_value = rpi_controller.prepare_relay_and_get_input(RELAY_PIN)
                     relay_dict[f'relay_{i}_pin_{RELAY_PIN}'] = input_value
                 except:
                     logger.error('Wrong number of relays provided.')
@@ -66,13 +63,13 @@ def statusRelay():
         return jsonify({'error': f'Status relay failed.', 'ip': ip}), 400
 
 @bp.route('/togglewaterpump', methods=['POST'])
-def toggleRoute():
+def toggleWaterPump():
     if request.method == 'POST':
         ip = request.access_route[-1]
         run_time = request.args.get('run_time', None)
         relay_number = request.args.get('relay', None)
         number_of_retries = request.args.get('number_of_retries', None)
-        res = water_pump.run_water_pump(relay_number, run_time, number_of_retries)
+        res = rpi_controller.run_water_pump(ip, relay_number, run_time, number_of_retries)
         if(res):
             logger.info(f'IP:{ip} /togglewaterpump success. request:{request}')
             return jsonify({"status": f"Water_pump runtime: {run_time}, number_of_retries: {number_of_retries}",'ip': ip, '_datetime': datetime.now()}), 200
@@ -84,8 +81,7 @@ def toggleRoute():
 def getTemp():
     try:
         ip = request.access_route[-1]
-        # humidity, temperature = Adafruit_DHT.read_retry(SENSOR, DHT_PIN)
-        measurement = dht11.read_sensor(SENSOR, DHT_PIN)
+        measurement = rpi_controller.read_dht_sensor(SENSOR, DHT_PIN)
         _formatTemperature = '{0:0.1f}*C'.format(measurement['temperature'])
         _formatHumidity = '{0:0.1f}%'.format(measurement['humidity'])
         rpi_controller.setLCDMessage(_formatTemperature, _formatHumidity)
