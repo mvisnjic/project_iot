@@ -1,6 +1,6 @@
-# project-iot - simple flask api
+# thingnet - simple flask api
 
-Minimal flask API for checking a temperature, toggle relays and getting a logs from it.
+flask API for checking a temperature, toggle relays and getting a logs from it.
 
 ## requirements
 - Rpi model 4B
@@ -16,15 +16,20 @@ python -m venv venv
 
 2. Modify .env
 ```
-cp .env.example .env && nano .env
+cp thingnet/.env.example thingnet/.env && nano thingnet/.env
 ```
 
-3. Install packages
+3. Create instance directory and adjust config.py and bash.cfg
+```
+mkdir instance && touch instance/config.py && touch instance/bash.cfg
+```
+
+4. Install packages
 ```
 pip install -r requirements.txt
 ```
 
-4. Flask run
+5. Flask run
 ```
 flask run
 ```
