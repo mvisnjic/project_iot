@@ -25,10 +25,14 @@ DHT_PIN = int(os.getenv('DHT_GPIO_PIN'))
 NUMBER_OF_MEASUREMENTS = int(os.getenv('NUMBER_OF_MEASUREMENTS'))
 
 def read_sensor(sensor, dht_pin):
-    humidity, temperature = Adafruit_DHT.read_retry(sensor, dht_pin)
-    if(int(humidity) > 100):
-        read_sensor(sensor, dht_pin)
-        return {'temperature': 0, 'humidity': 0}
+    try:
+        humidity, temperature = Adafruit_DHT.read_retry(sensor, dht_pin)
+    except:
+        logger.error("Read sensor failed! Calling function again...")
+        return read_sensor(sensor,dht_pin)
+
+    if(humidity is None or temperature is None or int(humidity) > 100):
+        return read_sensor(sensor, dht_pin)
     print('Temp={0:0.1f}*C  Humidity={1:0.1f}%'.format(temperature, humidity), "Datetime -", datetime.now())
     return {'temperature': temperature, 'humidity': humidity}
 
@@ -50,10 +54,8 @@ for i in range(NUMBER_OF_MEASUREMENTS):
         time.sleep(1)
         continue
     except Exception as error:
-        dhtDevice.exit()
         logger.error(error)
         raise error
-        
 
 RELAY_PIN = int(os.getenv('RELAY_PIN_1'))
 GPIO.setmode(GPIO.BOARD)
