@@ -8,6 +8,8 @@ import os
 from dotenv import load_dotenv
 import logging
 from thingnet import rpi_controller as rpi_controller
+from thingnet import water_pump as water_pump
+from thingnet import dht11 as dht11
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ def toggleRoute():
         res = rpi_controller.toggleRelay(ip, relay_number, choice)
         if(res):
             logger.info(f'IP:{ip} /togglerelay success. request:{request}')
-            return jsonify({"status": f"Turned {choice} relay-{relay_number}",'ip': ip}), 200
+            return jsonify({"status": f"Turned {choice} relay-{relay_number}",'ip': ip, }), 200
 
         logger.error(f'IP:{ip} /togglerelay failed. request:{request}')
         return jsonify({"error": f"Toggling relay failed.", 'ip': ip}), 400
@@ -63,16 +65,32 @@ def statusRelay():
         logger.error(f'IP:{ip} Get relay status failed. request:{request}')
         return jsonify({'error': f'Status relay failed.', 'ip': ip}), 400
 
+@bp.route('/togglewaterpump', methods=['POST'])
+def toggleRoute():
+    if request.method == 'POST':
+        ip = request.access_route[-1]
+        run_time = request.args.get('run_time', None)
+        relay_number = request.args.get('relay', None)
+        number_of_retries = request.args.get('number_of_retries', None)
+        res = water_pump.run_water_pump(relay_number, run_time, number_of_retries)
+        if(res):
+            logger.info(f'IP:{ip} /togglewaterpump success. request:{request}')
+            return jsonify({"status": f"Water_pump runtime: {run_time}, number_of_retries: {number_of_retries}",'ip': ip, '_datetime': datetime.now()}), 200
+
+        logger.error(f'IP:{ip} /togglewaterpump failed. request:{request}')
+        return jsonify({"error": f"Toggling water_pump failed.", 'ip': ip}), 400
+
 @bp.route('/temperature', methods=['GET'])
 def getTemp():
     try:
         ip = request.access_route[-1]
-        humidity, temperature = Adafruit_DHT.read_retry(SENSOR, DHT_PIN)
-        _formatTemperature = '{0:0.1f}*C'.format(temperature)
-        _formatHumidity = '{0:0.1f}%'.format(humidity)
+        # humidity, temperature = Adafruit_DHT.read_retry(SENSOR, DHT_PIN)
+        measurement = dht11.read_sensor(SENSOR, DHT_PIN)
+        _formatTemperature = '{0:0.1f}*C'.format(measurement['temperature'])
+        _formatHumidity = '{0:0.1f}%'.format(measurement['humidity'])
         rpi_controller.setLCDMessage(_formatTemperature, _formatHumidity)
         logger.info(f'IP:{ip} /temperature success. request:{request}')
-        return jsonify({'temperature': temperature, 'humidity': humidity, 'format_temperature': _formatTemperature, 'format_humidity': _formatHumidity, '_datetime': datetime.now(), "ip": ip}), 200
+        return jsonify({'temperature': measurement['temperature'], 'humidity': measurement['humidity'], 'format_temperature': _formatTemperature, 'format_humidity': _formatHumidity, '_datetime': datetime.now(), "ip": ip}), 200
     except:
         logger.error(f'IP:{ip} /temperature failed. request:{request}')
         return jsonify({'error': 'get temperature failed.', 'ip': ip}), 400
